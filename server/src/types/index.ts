@@ -1,4 +1,4 @@
-export type ProcessingStatus = 'uploaded' | 'processing' | 'processed' | 'extracting_questions' | 'questions_extracted' | 'failed';
+export type ProcessingStatus = 'uploaded' | 'processing' | 'processed' | 'extracting_questions' | 'questions_extracted' | 'extracting_answers' | 'answers_extracted' | 'mapping_answers' | 'answers_mapped' | 'failed';
 export type DocumentType = 'questionPaper' | 'answerSheet';
 
 export interface QuestionRegion {
@@ -22,21 +22,40 @@ export interface Question {
 
 export interface AnswerRegion {
   page: number; // 1-indexed
-  boundingBox: {
-    x: number;      // normalised 0–1
-    y: number;      // normalised 0–1
-    width: number;  // normalised 0–1
-    height: number; // normalised 0–1
-  };
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
-export interface Answer {
+export interface StudentAnswer {
   id: string;
-  questionId: string;
-  studentAnswerText: string;
-  marksObtained?: number;
-  feedback?: string;
+  questionNumber: string | null;
+  text: string;
   regions: AnswerRegion[];
+  page: number; // Starting page
+  confidence?: number;
+  needsReview?: boolean;
+}
+
+export interface QuestionAnswerMapping {
+  id: string;
+  questionId: string | null;
+  answerId: string | null;
+  status: 'matched' | 'unanswered' | 'unmatched' | 'conflict' | 'needs_review';
+  confidence: number;
+  method: 'exact_question_number' | 'normalized_question_number' | 'structural_inference' | 'spatial_context' | 'unmatched' | 'conflict';
+  needsReview: boolean;
+  candidateAnswerIds?: string[]; // For conflicts
+}
+
+export interface MappingSummary {
+  totalQuestions: number;
+  answered: number;
+  unanswered: number;
+  unmatchedAnswers: number;
+  conflicts: number;
+  needsReview: number;
 }
 
 export interface ProcessedPage {
@@ -64,6 +83,9 @@ export interface Assessment {
     answerSheet?: ProcessedDocument;
   };
   questions?: Question[];
+  answers?: StudentAnswer[];
+  mappings?: QuestionAnswerMapping[];
+  mappingSummary?: MappingSummary;
   createdAt: Date;
   updatedAt?: Date;
   error?: string;
@@ -72,7 +94,7 @@ export interface Assessment {
 export interface AssessmentResult {
   assessmentId: string;
   questions: Question[];
-  answers: Answer[];
+  answers: StudentAnswer[];
   totalMaxMarks: number;
   totalMarksObtained?: number;
 }

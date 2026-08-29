@@ -1,15 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { Upload, ArrowRight, Loader2, CheckCircle2, AlertCircle, X, Check, FileText } from 'lucide-react';
-import { uploadAssessmentFiles, processAssessment, extractQuestions } from '../services/assessmentApi';
+import { uploadAssessmentFiles, processAssessment, extractQuestions, extractAnswers, mapAnswers } from '../services/assessmentApi';
 import type { UploadState } from '../types';
 
 export const Dashboard: React.FC = () => {
   const [questionPaper, setQuestionPaper] = useState<File | null>(null);
   const [answerSheet, setAnswerSheet] = useState<File | null>(null);
-  const [uploadState, setUploadState] = useState<UploadState | 'processing' | 'extracting'>('idle');
+  const [uploadState, setUploadState] = useState<UploadState | 'processing' | 'extracting' | 'extracting_answers' | 'mapping_answers'>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [processResult, setProcessResult] = useState<any | null>(null);
-  const [extractResult, setExtractResult] = useState<any | null>(null);
+  const [mapAnswersResult, setMapAnswersResult] = useState<any | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [processingStage, setProcessingStage] = useState('');
@@ -68,9 +68,19 @@ export const Dashboard: React.FC = () => {
 
       // 3. Extract questions
       setUploadState('extracting');
-      setProcessingStage('Extracting questions using OCR...');
-      const extractData = await extractQuestions(result.assessmentId);
-      setExtractResult(extractData);
+      setProcessingStage('Extracting printed questions...');
+      await extractQuestions(result.assessmentId);
+
+      // 4. Extract answers
+      setUploadState('extracting_answers');
+      setProcessingStage('Extracting handwritten answers...');
+      await extractAnswers(result.assessmentId);
+
+      // 5. Map answers
+      setUploadState('mapping_answers');
+      setProcessingStage('Mapping answers to questions...');
+      const mapData = await mapAnswers(result.assessmentId);
+      setMapAnswersResult(mapData);
 
       setUploadState('success');
     } catch (err) {
@@ -85,7 +95,7 @@ export const Dashboard: React.FC = () => {
     setUploadState('idle');
     setUploadProgress(0);
     setProcessResult(null);
-    setExtractResult(null);
+    setMapAnswersResult(null);
     setUploadError(null);
     setQuestionPaper(null);
     setAnswerSheet(null);
@@ -104,6 +114,7 @@ export const Dashboard: React.FC = () => {
 
   // ── Success screen ──────────────────────────────────────────────────────────
   if (uploadState === 'success' && processResult) {
+    const summary = mapAnswersResult?.summary || {};
     return (
       <div className="flex flex-col items-center justify-center min-h-full py-12 px-6 bg-[radial-gradient(circle_at_center_40%,_#FFFFFF_0%,_#F2F2F2_60%,_#DCDCDC_100%)]">
         <div className="w-full max-w-lg bg-white rounded-2xl border border-gray-200 shadow-sm p-8 flex flex-col items-center text-center gap-5">
@@ -111,8 +122,8 @@ export const Dashboard: React.FC = () => {
             <CheckCircle2 className="h-8 w-8" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Questions Extracted</h2>
-            <p className="text-sm text-gray-400 mt-1">Ready for handwriting processing.</p>
+            <h2 className="text-xl font-bold text-gray-900">Answers Mapped</h2>
+            <p className="text-sm text-gray-400 mt-1">Ready for grading and review.</p>
           </div>
 
           <div className="w-full bg-gray-50 border border-gray-200 rounded-xl divide-y divide-gray-100 text-left">
@@ -120,31 +131,53 @@ export const Dashboard: React.FC = () => {
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Assessment ID</p>
               <code className="text-xs font-mono text-[#FF5A26] break-all">{processResult.assessmentId}</code>
             </div>
-            <div className="grid grid-cols-2 divide-x divide-gray-100">
+            <div className="grid grid-cols-2 divide-x divide-y divide-gray-100">
               <div className="px-4 py-3">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Question Paper</p>
-                <p className="text-xs font-semibold text-gray-700 truncate">{processResult.questionPaper?.totalPages || 0} Pages</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Questions</p>
+                <p className="text-xs font-semibold text-gray-700 truncate">{summary.totalQuestions || 0}</p>
               </div>
               <div className="px-4 py-3">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Questions Found</p>
-                <p className="text-xs font-semibold text-gray-700 truncate">{extractResult?.questions?.length || 0} Questions</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Answered</p>
+                <p className="text-xs font-semibold text-gray-700 truncate">{summary.answered || 0}</p>
+              </div>
+              <div className="px-4 py-3">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Unanswered</p>
+                <p className="text-xs font-semibold text-gray-700 truncate">{summary.unanswered || 0}</p>
+              </div>
+              <div className="px-4 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Unmatched</p>
+                  <p className="text-xs font-semibold text-gray-700 truncate">{summary.unmatchedAnswers || 0}</p>
+                </div>
+                {(summary.unmatchedAnswers > 0 || summary.conflicts > 0 || summary.needsReview > 0) && (
+                  <AlertCircle className="h-4 w-4 text-orange-500" />
+                )}
               </div>
             </div>
           </div>
 
-          <button
-            onClick={handleReset}
-            className="mt-2 px-6 py-2.5 bg-[#212121] hover:bg-black text-white text-sm font-semibold rounded-full transition-colors"
-          >
-            Upload Another Assessment
-          </button>
+          <div className="flex gap-3 mt-2">
+            <button
+              onClick={handleReset}
+              className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-full transition-colors"
+            >
+              Upload Another
+            </button>
+            <button
+              onClick={() => window.location.href = `/review/${processResult.assessmentId}`}
+              className="px-6 py-2.5 bg-[#212121] hover:bg-black text-white text-sm font-semibold rounded-full transition-colors flex items-center gap-2"
+            >
+              Review Assessment
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   // ── Processing screen ────────────────────────────────────────────────────────
-  if (uploadState === 'processing' || uploadState === 'extracting') {
+  if (uploadState === 'processing' || uploadState === 'extracting' || uploadState === 'extracting_answers' || uploadState === 'mapping_answers') {
     return (
       <div className="flex flex-col items-center justify-center min-h-full py-12 px-6 bg-[radial-gradient(circle_at_center_40%,_#FFFFFF_0%,_#F2F2F2_60%,_#DCDCDC_100%)]">
         <div className="w-full max-w-sm bg-white rounded-2xl border border-gray-200 shadow-sm p-8 flex flex-col items-center text-center gap-5">

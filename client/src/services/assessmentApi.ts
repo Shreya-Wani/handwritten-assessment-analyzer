@@ -79,3 +79,58 @@ export async function extractQuestions(assessmentId: string): Promise<any> {
     throw new Error(serverMessage ?? 'Question extraction failed.');
   }
 }
+
+/**
+ * Triggers Phase 5 handwriting answer extraction.
+ */
+export async function extractAnswers(assessmentId: string): Promise<any> {
+  try {
+    const response = await apiClient.post<{ success: true; data: any }>(
+      `/api/assessments/${assessmentId}/extract-answers`
+    );
+    return response.data.data;
+  } catch (err) {
+    const axiosErr = err as AxiosError<ApiError>;
+    const serverMessage = axiosErr.response?.data?.message;
+    throw new Error(serverMessage ?? 'Answer extraction failed.');
+  }
+}
+
+/**
+ * Triggers Phase 6 deterministic answer mapping.
+ */
+export async function mapAnswers(assessmentId: string): Promise<any> {
+  try {
+    const response = await apiClient.post<{ success: true; data: any }>(
+      `/api/assessments/${assessmentId}/map-answers`
+    );
+    return response.data.data;
+  } catch (err) {
+    const axiosErr = err as AxiosError<ApiError>;
+    const serverMessage = axiosErr.response?.data?.message;
+    throw new Error(serverMessage ?? 'Answer mapping failed.');
+  }
+}
+
+/**
+ * Retrieves the full assessment structure.
+ */
+export async function getAssessment(assessmentId: string): Promise<any> {
+  try {
+    const response = await apiClient.get<{ success: true; data: any }>(`/api/assessments/${assessmentId}`);
+    return response.data.data;
+  } catch (err) {
+    const axiosErr = err as AxiosError<ApiError>;
+    const serverMessage = axiosErr.response?.data?.message;
+    throw new Error(serverMessage ?? 'Failed to fetch assessment.');
+  }
+}
+
+/**
+ * Returns the URL for a specific processed page image.
+ */
+export function getPageImageUrl(assessmentId: string, documentType: 'questionPaper' | 'answerSheet', pageNumber: number): string {
+  // Assuming apiClient.defaults.baseURL handles the prefix in some environments,
+  // but for an img src, we need the raw URL. If using proxy in Vite, it's just /api/...
+  return `/api/assessments/${assessmentId}/pages/${documentType}/${pageNumber}`;
+}

@@ -148,3 +148,126 @@ export const extractQuestions = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Handle POST /:assessmentId/extract-answers
+ * Extracts handwritten answers using OCR and parses references.
+ */
+export const extractAnswers = async (req: Request, res: Response) => {
+  const { assessmentId } = req.params;
+
+  try {
+    const { extractAnswersForAssessment } = await import('../services/answerExtractionService');
+    const answers = await extractAnswersForAssessment(assessmentId);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Answers extracted successfully',
+      data: {
+        assessmentId,
+        answers
+      }
+    });
+  } catch (error: any) {
+    console.error(`Error extracting answers for ${assessmentId}:`, error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Answer extraction failed.',
+      code: 'EXTRACTION_ERROR'
+    });
+  }
+};
+
+/**
+ * Handle POST /:assessmentId/map-answers
+ * Maps extracted handwritten answers to printed questions deterministic rules.
+ */
+export const mapAnswers = async (req: Request, res: Response) => {
+  const { assessmentId } = req.params;
+
+  try {
+    const { mapAnswersToQuestions } = await import('../services/answerMappingService');
+    const { mappings, summary } = mapAnswersToQuestions(assessmentId);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Answers mapped successfully',
+      data: {
+        assessmentId,
+        summary,
+        mappings
+      }
+    });
+  } catch (error: any) {
+    console.error(`Error mapping answers for ${assessmentId}:`, error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Mapping failed.',
+      code: 'MAPPING_ERROR'
+    });
+  }
+};
+
+/**
+ * Handle GET /:assessmentId
+ * Returns the full structured assessment data.
+ */
+export const getAssessmentById = (req: Request, res: Response) => {
+  try {
+    const { assessmentId } = req.params;
+    const assessment = assessmentStore.getAssessment(assessmentId);
+    if (!assessment) {
+      return res.status(404).json({ success: false, message: 'Assessment not found' });
+    }
+    return res.status(200).json({ success: true, data: assessment });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Handle GET /:assessmentId/pages/:documentType/:pageNumber
+ * Serves processed PNG images securely.
+ */
+export const getPageImage = (req: Request, res: Response) => {
+  try {
+    const { assessmentId, documentType, pageNumber } = req.params;
+    
+    if (documentType !== 'questionPaper' && documentType !== 'answerSheet') {
+      return res.status(400).json({ success: false, message: 'Invalid document type' });
+    }
+
+    const assessment = assessmentStore.getAssessment(assessmentId);
+    if (!assessment || !assessment.processedData) {
+      return res.status(404).json({ success: false, message: 'Assessment or processed data not found' });
+    }
+
+    const docData = assessment.processedData[documentType];
+    if (!docData || !docData.pages) {
+      return res.status(404).json({ success: false, message: 'Pages not found for document' });
+    }
+
+    const pageNum = parseInt(pageNumber, 10);
+    const page = docData.pages.find(p => p.pageNumber === pageNum);
+
+    if (!page) {
+      return res.status(404).json({ success: false, message: 'Page not found' });
+    }
+
+    const { PROCESSED_DIR } = require('../services/fileService');
+    const path = require('path');
+    
+    // Construct path securely using the known metadata id
+    const imagePath = path.join(PROCESSED_DIR, assessmentId, documentType, page.imageId);
+
+    // Prevent path traversal
+    if (!imagePath.startsWith(path.resolve(PROCESSED_DIR))) {
+      return res.status(403).json({ success: false, message: 'Invalid path' });
+    }
+
+    res.setHeader('Content-Type', 'image/png');
+    res.sendFile(imagePath);
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
