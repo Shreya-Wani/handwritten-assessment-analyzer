@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { uploadFields } from '../middleware/uploadMiddleware';
-import { uploadAssessment, processAssessment, extractQuestions, extractAnswers, mapAnswers, getAssessmentById, getPageImage } from '../controllers/assessmentController';
+import { uploadAssessment, processAssessment, extractQuestions, extractAnswers, mapAnswers, getAssessmentById, getPageImage, gradeQuestion } from '../controllers/assessmentController';
 
 const router = Router();
 
@@ -24,5 +24,8 @@ router.get('/:assessmentId', getAssessmentById);
 
 // Get specific page image
 router.get('/:assessmentId/pages/:documentType/:pageNumber', getPageImage);
+
+// Grade a question manually
+router.patch('/:assessmentId/questions/:questionId/grade', gradeQuestion);
 
 export default router;

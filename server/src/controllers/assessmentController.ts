@@ -271,3 +271,57 @@ export const getPageImage = (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Handle PATCH /:assessmentId/questions/:questionId/grade
+ * Manually sets a grade for a mapped question.
+ */
+export const gradeQuestion = (req: Request, res: Response) => {
+  try {
+    const { assessmentId, questionId } = req.params;
+    const { marksObtained, feedback } = req.body;
+
+    const assessment = assessmentStore.getAssessment(assessmentId);
+    if (!assessment) {
+      return res.status(404).json({ success: false, message: 'Assessment not found' });
+    }
+
+    const question = assessment.questions?.find(q => q.id === questionId);
+    if (!question) {
+      return res.status(404).json({ success: false, message: 'Question not found in assessment' });
+    }
+
+    // Validate marks
+    let graded = false;
+    let validatedMarks: number | null = null;
+    
+    if (marksObtained !== undefined && marksObtained !== null) {
+      const parsed = Number(marksObtained);
+      if (isNaN(parsed) || parsed < 0) {
+        return res.status(400).json({ success: false, message: 'Marks must be a positive number' });
+      }
+      if (question.maxMarks !== undefined && parsed > question.maxMarks) {
+        return res.status(400).json({ success: false, message: `Marks cannot exceed maximum of ${question.maxMarks}` });
+      }
+      validatedMarks = parsed;
+      graded = true;
+    }
+
+    // Store the grade
+    assessmentStore.setQuestionGrade(assessmentId, questionId, {
+      marksObtained: validatedMarks,
+      maxMarks: question.maxMarks ?? null,
+      feedback: feedback || '',
+      graded
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Grade saved successfully',
+      data: assessment.grades![questionId]
+    });
+
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+

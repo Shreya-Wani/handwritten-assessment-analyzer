@@ -72,6 +72,14 @@ export interface ProcessedDocument {
   pages: ProcessedPage[];
 }
 
+export interface QuestionGrade {
+  questionId: string;
+  marksObtained: number | null;
+  maxMarks: number | null;
+  feedback?: string;
+  graded: boolean;
+}
+
 export interface Assessment {
   id: string;
   title?: string;
@@ -86,6 +94,7 @@ export interface Assessment {
   answers?: StudentAnswer[];
   mappings?: QuestionAnswerMapping[];
   mappingSummary?: MappingSummary;
+  grades?: Record<string, QuestionGrade>;
   createdAt: Date;
   updatedAt?: Date;
   error?: string;

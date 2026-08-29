@@ -134,3 +134,17 @@ export function getPageImageUrl(assessmentId: string, documentType: 'questionPap
   // but for an img src, we need the raw URL. If using proxy in Vite, it's just /api/...
   return `/api/assessments/${assessmentId}/pages/${documentType}/${pageNumber}`;
 }
+
+/**
+ * Submits a manual grade for a question.
+ */
+export async function submitGrade(assessmentId: string, questionId: string, data: { marksObtained: number | null, feedback?: string }): Promise<any> {
+  try {
+    const response = await apiClient.patch<{ success: true; data: any }>(`/api/assessments/${assessmentId}/questions/${questionId}/grade`, data);
+    return response.data.data;
+  } catch (err) {
+    const axiosErr = err as AxiosError<ApiError>;
+    const serverMessage = axiosErr.response?.data?.message;
+    throw new Error(serverMessage ?? 'Failed to submit grade.');
+  }
+}

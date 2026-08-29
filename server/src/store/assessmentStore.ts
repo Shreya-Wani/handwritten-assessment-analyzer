@@ -53,6 +53,25 @@ class AssessmentStore {
     return assessment;
   }
 
+  setQuestionGrade(id: string, questionId: string, gradeData: { marksObtained: number | null, maxMarks: number | null, feedback?: string, graded: boolean }): Assessment {
+    const assessment = this.getAssessment(id);
+    if (!assessment) throw new Error(`Assessment ${id} not found`);
+    
+    if (!assessment.grades) {
+      assessment.grades = {};
+    }
+    
+    assessment.grades[questionId] = {
+      questionId,
+      ...gradeData
+    };
+    
+    assessment.updatedAt = new Date();
+    this.assessments.set(id, assessment);
+    
+    return assessment;
+  }
+
   /**
    * Delete an assessment from the store.
    */
