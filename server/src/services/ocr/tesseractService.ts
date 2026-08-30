@@ -10,7 +10,7 @@ export async function extractTextFromPage(
   const worker = await createWorker('eng');
   
   try {
-    const { data } = await worker.recognize(imagePath);
+    const { data } = await worker.recognize(imagePath, {}, { blocks: true });
     
     const blocks: OCRBlock[] = [];
 

@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
-import { Canvas } from 'skia-canvas';
 import { assessmentStore } from '../store/assessmentStore';
 import { Assessment, ProcessedDocument, ProcessedPage, DocumentType } from '../types';
 import { UPLOADS_DIR } from '../config/constants';
 import { ensureProcessedDir } from './fileService';
+import { NodeCanvasFactory } from './pdfCanvasFactory';
 
 /**
  * Main orchestrator for document processing.
@@ -49,6 +49,7 @@ export const processAssessmentFiles = async (assessmentId: string): Promise<Asse
     // Update state to processed
     return assessmentStore.updateStatus(assessmentId, 'processed')!;
   } catch (error: any) {
+    // If processing fails, cleanup partial output is a good practice, but handled generally in failed state
     assessmentStore.updateStatus(assessmentId, 'failed', error.message);
     throw error;
   }
@@ -73,7 +74,7 @@ async function processDocument(
 }
 
 /**
- * Processes a PDF by rendering each page to a PNG using pdfjs-dist + skia-canvas.
+ * Processes a PDF by rendering each page to a PNG using pdfjs-dist + @napi-rs/canvas.
  */
 async function processPdf(
   filePath: string,
@@ -87,10 +88,24 @@ async function processPdf(
   
   const data = new Uint8Array(fs.readFileSync(filePath));
   
+  const { pathToFileURL } = require('url');
+  const pdfjsDistPath = path.dirname(require.resolve('pdfjs-dist/package.json'));
+  
+  let standardFontDataUrl = pathToFileURL(path.join(pdfjsDistPath, 'standard_fonts')).href;
+  if (!standardFontDataUrl.endsWith('/')) standardFontDataUrl += '/';
+
+  let cMapUrl = pathToFileURL(path.join(pdfjsDistPath, 'cmaps')).href;
+  if (!cMapUrl.endsWith('/')) cMapUrl += '/';
+  
+  const canvasFactory = new NodeCanvasFactory();
+
   const loadingTask = pdfjsLib.getDocument({
     data,
     disableFontFace: true,
-    standardFontDataUrl: path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'standard_fonts/')
+    standardFontDataUrl,
+    cMapUrl,
+    cMapPacked: true,
+    canvasFactory
   });
 
   const pdfDocument = await loadingTask.promise;
@@ -102,16 +117,22 @@ async function processPdf(
     // Use scale 2.5 for high-quality OCR resolution (A4 width -> ~1500px)
     const viewport = page.getViewport({ scale: 2.5 });
 
-    const canvas = new Canvas(viewport.width, viewport.height);
-    const ctx = canvas.getContext('2d');
+    const canvasAndCtx = canvasFactory.create(viewport.width, viewport.height);
+    const canvas = canvasAndCtx.canvas;
+    const ctx = canvasAndCtx.context;
 
     await page.render({
       canvasContext: ctx as any,
-      viewport: viewport
+      viewport: viewport,
+      canvasFactory
     }).promise;
 
     // Save as standard PNG
-    const buffer = await canvas.toBuffer('png');
+    const buffer = await canvas.encode('png');
+    
+    // Cleanup memory
+    canvasFactory.destroy(canvasAndCtx);
+    
     const imageId = `page-${i}.png`;
     const outPath = path.join(outDir, imageId);
     
